@@ -1,30 +1,36 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class LevelGenerator : MonoBehaviour
 {
     [SerializeField]
-    private GameObject[] prefabs; // Array to hold the different prefabs
+    private GameObject[] prefabs;
     [SerializeField]
-    private Transform playerTransform; // Reference to the player’s transform
+    private Transform playerTransform;
     [SerializeField]
-    private float initialSpawnHeight = 0f; // Initial height to start spawning
+    private float initialSpawnHeight = 0f;
     [SerializeField]
-    private float minX = -5f; // Minimum X position for spawning
+    private float minX = -5f;
     [SerializeField]
-    private float maxX = 5f; // Maximum X position for spawning
+    private float maxX = 5f;
     [SerializeField]
-    private float spawnBufferDistance = 10f; // Distance above the visible area to spawn prefabs
+    private float spawnBufferDistance = 10f;
+    [SerializeField]
+    private float destructionDistance = 40f;
 
     private float nextSpawnHeight;
-    private int difficultyLevel = 1; // Tracks the difficulty level
+    private int difficultyLevel = 1;
     [SerializeField]
-    private float difficultyIncreaseThreshold = 50f; // Distance interval to increase difficulty
+    private float difficultyIncreaseThreshold = 25f;
+    [SerializeField]
+    private PlayerController playerController;
+
+    private List<GameObject> spawnedBranches = new List<GameObject>();
 
     private void Start()
     {
         nextSpawnHeight = initialSpawnHeight;
 
-        // Spawn a few initial prefabs to ensure enough content
         for (int i = 0; i < 5; i++)
         {
             SpawnPrefab();
@@ -33,39 +39,64 @@ public class LevelGenerator : MonoBehaviour
 
     private void Update()
     {
-        // Calculate the spawn position based on player position and camera size
         float spawnHeightThreshold = playerTransform.position.y + (Camera.main.orthographicSize * 2) + spawnBufferDistance;
 
-        // Spawn a new prefab if the next spawn height is within or below the threshold
         while (nextSpawnHeight <= spawnHeightThreshold)
         {
             SpawnPrefab();
         }
 
-        // Increase difficulty as the player progresses upward
         if (playerTransform.position.y >= difficultyLevel * difficultyIncreaseThreshold)
         {
             IncreaseDifficulty();
         }
+
+        DestroyFarBranches();
     }
 
     private void SpawnPrefab()
     {
-        GameObject prefabToSpawn = prefabs[Random.Range(0, prefabs.Length)];
+        float previousX = float.MinValue;
 
-        float randomX = Random.Range(minX, maxX);
+        for (int i = 0; i < 2; i++)
+        {
+            GameObject prefabToSpawn = prefabs[Random.Range(0, prefabs.Length)];
 
-        Vector3 spawnPosition = new Vector3(randomX, nextSpawnHeight, 0);
-        Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity);
+            float randomX;
+            do
+            {
+                randomX = Random.Range(minX, maxX);
+            } while (Mathf.Abs(randomX - previousX) < 5f);
+
+            Vector3 spawnPosition = new Vector3(randomX, nextSpawnHeight, 0);
+            GameObject spawnedBranch = Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity);
+            spawnedBranches.Add(spawnedBranch);
+
+            previousX = randomX;
+        }
 
         nextSpawnHeight += Random.Range(3f, 5f);
+    }
+
+    private void DestroyFarBranches()
+    {
+        float minHeightThreshold = playerTransform.position.y - destructionDistance;
+
+        for (int i = spawnedBranches.Count - 1; i >= 0; i--)
+        {
+            if (spawnedBranches[i] != null && spawnedBranches[i].transform.position.y < minHeightThreshold)
+            {
+                Destroy(spawnedBranches[i]);
+                spawnedBranches.RemoveAt(i);
+            }
+        }
     }
 
     private void IncreaseDifficulty()
     {
         difficultyLevel++;
-
-        float newDestructionDelay = Mathf.Lerp(5f, 0.75f, (float)difficultyLevel / 10); // Adjust the divisor as needed for smoother or faster transitions
+        float newDestructionDelay = Mathf.Lerp(5f, 0.75f, (float)difficultyLevel / 10);
+        playerController.UpdatePlayerSpeed();
         BreakableBranch.UpdateDestructionDelay(newDestructionDelay);
     }
 }

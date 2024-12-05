@@ -2,101 +2,146 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
-    public GameObject player; // Reference to the player GameObject
-    private Camera mainCamera;
-    private bool isPlaying = true;
-    private float maxHeightReached = 0f; // Tracks the maximum height reached by the player during the current session
-    private int score = 0; // Tracks the score during the current session
-    private int highScore; // Tracks the highest score across all game sessions
-    private const string HighScoreKey = "HighScore"; // Key for PlayerPrefs
-    private bool isNewHighScore = false; // Tracks whether a new high score was achieved
+    [SerializeField]
+    private GameObject player;
+    private float startTime;
+    [SerializeField]
+    private TextMeshProUGUI timerText;
     [SerializeField]
     private GameObject gameOverScreen;
     [SerializeField]
+    private TextMeshProUGUI gameOverText;
+    [SerializeField]
     private TextMeshProUGUI highScoreText;
+    [SerializeField]
+    private Slider progressBar;
+    [SerializeField]
+    private float endHeight = 500f;
+    [SerializeField]
+    private AudioManager audioManager;
+    private Camera mainCamera;
+    private bool isPlaying = true;
+    private float maxHeightReached = 0f;
+    private int score = 0;
+    private int highScore;
+    private const string HighScoreKey = "HighScore";
+    private bool isNewHighScore = false;
 
-    // Start is called before the first frame update
     void Start()
     {
-        // Get the main camera reference
+        startTime = Time.time;
         mainCamera = Camera.main;
+        highScore = PlayerPrefs.GetInt(HighScoreKey, 0);
 
-        // Load the stored high score
-        highScore = PlayerPrefs.GetInt(HighScoreKey, 0); // Default value is 0 if no high score exists
-        Debug.Log("Loaded High Score: " + highScore);
+        if (progressBar != null)
+        {
+            progressBar.minValue = 0f;
+            progressBar.maxValue = endHeight;
+            progressBar.value = 0f;
+        }
     }
 
-    // Update is called once per frame
     void Update()
     {
         if (isPlaying && player != null)
         {
             CheckHeightScore();
 
-            // Check if player falls below the camera's view
             Vector3 viewportPosition = mainCamera.WorldToViewportPoint(player.transform.position);
             if (viewportPosition.y < 0)
             {
                 GameOver();
             }
+            if (player.transform.position.y >= endHeight)
+            {
+                Win();
+            }
+
+            float elapsedTime = Time.time - startTime;
+            UpdateTimer(elapsedTime);
+            UpdateProgressBar();
         }
     }
 
-    public bool IsPlaying
+    public bool IsPlaying => isPlaying;
+
+    private void UpdateTimer(float elapsedTime)
     {
-        get { return isPlaying; }
+        int minutes = Mathf.FloorToInt(elapsedTime / 60f);
+        int seconds = Mathf.FloorToInt(elapsedTime % 60f);
+        timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
     }
 
-    // Function to check and update height-based score
     private void CheckHeightScore()
     {
         float currentPlayerHeight = player.transform.position.y;
 
-        // If player reaches a new maximum height, update the score
         if (currentPlayerHeight > maxHeightReached)
         {
             maxHeightReached = currentPlayerHeight;
-            score = (int)maxHeightReached; // Set the current session's score to the new height
+            score = (int)maxHeightReached;
         }
     }
 
-    // Function to update high score and save using PlayerPrefs
     private void UpdateHighScore()
     {
-        // If the current score is higher than the saved high score, update the high score
         if (score > highScore)
         {
             highScore = score;
-
-            // Save the new high score
             PlayerPrefs.SetInt(HighScoreKey, highScore);
-            PlayerPrefs.Save(); // Ensure the data is saved to disk
-
-            // Mark that a new high score was achieved
+            PlayerPrefs.Save();
             isNewHighScore = true;
         }
     }
 
     private void GameOver()
     {
-        // Update the high score at the end of the game if needed
         UpdateHighScore();
+        float elapsedTime = Time.time - startTime;
         gameOverScreen.SetActive(true);
+        gameOverText.text = "Game Over!";
 
         if (isNewHighScore)
         {
-            highScoreText.text = "New High Score: " + highScore;
-            Debug.Log("Game Over: New High Score! " + highScore);
+            highScoreText.text = "Time: " + FormatTime(elapsedTime) + "\nNew High Score: " + highScore;
         }
         else
         {
-            highScoreText.text = "High Score: " + highScore + "\nYour Score: " + score;
-            Debug.Log("Game Over: Your Score is " + score + ", High Score: " + highScore);
+            highScoreText.text = "\nTime: " + FormatTime(elapsedTime) + "\nHigh Score: " + highScore + "\nYour Score: " + score;
         }
 
         isPlaying = false;
+        audioManager.PlayLoseSound();
+    }
+
+    private void Win()
+    {
+        UpdateHighScore();
+        float elapsedTime = Time.time - startTime;
+        gameOverScreen.SetActive(true);
+        gameOverText.text = "You Win!";
+        highScoreText.text = "Time: " + FormatTime(elapsedTime) + "\nHigh Score: " + highScore;
+        isPlaying = false;
+        audioManager.PlayWinSound();
+    }
+
+    private void UpdateProgressBar()
+    {
+        if (progressBar != null && player != null)
+        {
+            float playerHeight = Mathf.Clamp(player.transform.position.y, 0f, endHeight);
+            progressBar.value = playerHeight;
+        }
+    }
+
+    private string FormatTime(float time)
+    {
+        int minutes = Mathf.FloorToInt(time / 60f);
+        int seconds = Mathf.FloorToInt(time % 60f);
+        return string.Format("{0:00}:{1:00}", minutes, seconds);
     }
 }
